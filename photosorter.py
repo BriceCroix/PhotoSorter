@@ -4,6 +4,7 @@ import tkinter as tk
 import tkinter.filedialog
 import exifread
 import json
+from matplotlib.pyplot import fill
 import unidecode
 
 from enum import Enum
@@ -28,95 +29,118 @@ PHOTOSORTER_SUBDIR = '.photosorter'
 
 class SortByDir(Enum):
     SORT_BY_NONE = 0
-    SORT_BY_YEAR = 1
-    SORT_BY_MONTH = 2
-    SORT_BY_YEAR_AND_MONTH = 3
+    SORT_BY_YEAR = SORT_BY_NONE+1
+    SORT_BY_MONTH = SORT_BY_YEAR+1
+    SORT_BY_YEAR_AND_MONTH = SORT_BY_MONTH+1
 
 
 class PhotoSorterGui:
     def __init__(self) -> None:
         self.window = tk.Tk()
         self.window.title('Photo Sorter')
-        self.window.geometry('640x480')
+        #self.window.geometry('1280x480')
 
         self.directory = tk.StringVar()
-        self.revert = tk.BooleanVar()
         self.use_gps = tk.BooleanVar()
+        self.use_gps.set(True)
         self.suffix = tk.StringVar()
         self.suffix.set('')
         self.sort_by_dir = tk.IntVar()
         self.sort_by_dir.set(SortByDir.SORT_BY_NONE.value)
 
-        self.directory_frm = tk.LabelFrame(self.window, text='Directory to process')
-        self.directory_frm.pack(fill='both')
+        # Directory frame
+        self.directory_lblfrm = tk.LabelFrame(self.window, text='Directory to process')
+        self.directory_lblfrm.pack(fill='x')
 
-        self.directory_lbl = tk.Label(self.directory_frm, textvariable=self.directory)
-        self.directory_lbl.pack()
+        self.directory_lbl = tk.Label(self.directory_lblfrm, textvariable=self.directory)
+        self.directory_lbl.pack(side=tk.RIGHT, fill='x', padx=10)
+        self.open_dir_btn = tk.Button(self.directory_lblfrm, text="Open Directory", command=self.on_open_dir_btn_click)
+        self.open_dir_btn.pack(side=tk.LEFT)
 
-        self.open_dir_btn = tk.Button(self.directory_frm, text="Open Directory", command=self.on_open_dir_btn_click)
-        self.open_dir_btn.pack()
+        # Options frame
+        self.options_lblfrm = tk.LabelFrame(self.window, text='Options')
+        self.options_lblfrm.pack(fill='both', pady=10)
 
-        self.options_frm = tk.LabelFrame(self.window, text='Options')
-        self.options_frm.pack(fill='both')
+        self.gps_frm = tk.Frame(self.options_lblfrm)
+        self.gps_frm.pack(side=tk.TOP, fill='x')
+        self.gps_lbl = tk.Label(self.gps_frm, text='Use GPS data')
+        self.gps_lbl.pack(side=tk.LEFT)
+        self.gps_chk = tk.Checkbutton(self.gps_frm, text='y/n', variable=self.use_gps)
+        self.gps_chk.pack(side=tk.RIGHT, expand=True)
 
-        self.gps_chk = tk.Checkbutton(self.options_frm, text="Include GPS data", variable=self.use_gps)
-        self.gps_chk.pack()
+        self.suffix_frm = tk.Frame(self.options_lblfrm)
+        self.suffix_frm.pack(side=tk.TOP, fill='x')
+        self.suffix_lbl = tk.Label(self.suffix_frm, text='Optional files suffix')
+        self.suffix_lbl.pack(side=tk.LEFT)
+        self.suffix_entry = tk.Entry(self.suffix_frm, textvariable=self.suffix, width=50)
+        self.suffix_entry.pack(side=tk.RIGHT, fill='x', expand=True, padx=10)
 
-        self.suffix_entry = tk.Entry(self.options_frm, textvariable=self.suffix, width=30)
-        self.suffix_entry.pack()
+        self.sort_by_dir_frm = tk.Frame(self.options_lblfrm)
+        self.sort_by_dir_frm.pack(side=tk.TOP, fill='x')
+        self.sort_by_dir_lbl = tk.Label(self.sort_by_dir_frm, text='Sort in subdirectories')
+        self.sort_by_dir_lbl.pack(side=tk.LEFT)
+        self.sort_by_dir_none_radiobtn = tk.Radiobutton(self.sort_by_dir_frm, text="Do not sort", variable=self.sort_by_dir, value=SortByDir.SORT_BY_NONE.value)
+        self.sort_by_dir_none_radiobtn.pack(side=tk.RIGHT, padx=10)
+        self.sort_by_dir_year_radiobtn= tk.Radiobutton(self.sort_by_dir_frm, text="Year/", variable=self.sort_by_dir, value=SortByDir.SORT_BY_YEAR.value)
+        self.sort_by_dir_year_radiobtn.pack(side=tk.RIGHT, padx=10)
+        self.sort_by_dir_month_radiobtn = tk.Radiobutton(self.sort_by_dir_frm, text="Year-Month/", variable=self.sort_by_dir, value=SortByDir.SORT_BY_MONTH.value)
+        self.sort_by_dir_month_radiobtn.pack(side=tk.RIGHT, padx=10)
+        self.sort_by_dir_year_and_month_radiobtn = tk.Radiobutton(self.sort_by_dir_frm, text="Year/Month/", variable=self.sort_by_dir, value=SortByDir.SORT_BY_YEAR_AND_MONTH.value)
+        self.sort_by_dir_year_and_month_radiobtn.pack(side=tk.RIGHT, padx=10)
 
-        self.sort_by_dir_none_radiobtn = tk.Radiobutton(self.options_frm, text="Do not sort", variable=self.sort_by_dir, value=SortByDir.SORT_BY_NONE.value)
-        self.sort_by_dir_none_radiobtn.pack()
-        self.sort_by_dir_year_radiobtn= tk.Radiobutton(self.options_frm, text="Sort by year/", variable=self.sort_by_dir, value=SortByDir.SORT_BY_YEAR.value)
-        self.sort_by_dir_year_radiobtn.pack()
-        self.sort_by_dir_month_radiobtn = tk.Radiobutton(self.options_frm, text="Sort by month/", variable=self.sort_by_dir, value=SortByDir.SORT_BY_MONTH.value)
-        self.sort_by_dir_month_radiobtn.pack()
-        self.sort_by_dir_year_and_month_radiobtn = tk.Radiobutton(self.options_frm, text="Sort by year/month/", variable=self.sort_by_dir, value=SortByDir.SORT_BY_YEAR_AND_MONTH.value)
-        self.sort_by_dir_year_and_month_radiobtn.pack()
+        # Start frame
+        self.start_lblfrm = tk.LabelFrame(self.window, text='')
+        self.start_lblfrm.pack(fill='x')
+        
+        self.start_frm = tk.Frame(self.start_lblfrm)
+        self.start_frm.pack(side=tk.TOP, fill='x')
+        self.revert_btn = tk.Button(self.start_lblfrm, text="Revert", command=self.on_revert_btn_click)
+        self.revert_btn.pack(side=tk.LEFT, padx=10, pady=10)
+        start_btn = tk.Button(self.start_lblfrm, text="Start", command=self.on_start_btn_click)
+        start_btn.pack(side=tk.RIGHT, padx=10, pady=10)
+        #TODO : something telling the app is busy
 
-        self.start_frm = tk.LabelFrame(self.window, text='')
-        self.start_frm.pack(fill='both')
-
-        self.revert_chx = tk.Checkbutton(self.start_frm, text="Revert", variable=self.revert, command=self.on_revert_changed)
-        self.revert_chx.pack()
-
-        start_btn = tk.Button(self.start_frm, text="Start", command=self.on_start_btn_click)
-        start_btn.pack()
-
+        # Laucnch mainloop
         self.window.mainloop()
 
     def on_open_dir_btn_click(self):
         self.directory.set(tk.filedialog.askdirectory())
 
+    def on_revert_btn_click(self):
+        if self.directory.get() != '':
+            if revert_directory(self.directory.get()) != 0:
+                tk.messagebox.showerror('Error', 'An error occurred !')
+            else:
+                tk.messagebox.showinfo('Info', 'Revert successful !')
+        else:
+            tk.messagebox.showerror('Error', 'Please give directory to process')
+
     def on_start_btn_click(self):
         if self.directory.get() != '':
-            if self.revert.get():
-                if revert_directory(self.directory.get()) != 0:
-                    tk.messagebox.showerror('Error', 'An error occurred !')
-                else:
-                    tk.messagebox.showinfo('Info', 'Revert successful !')
-            else:
-                process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get())) 
-                tk.messagebox.showinfo('Info', 'Operation successful !')
+            process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get())) 
+            tk.messagebox.showinfo('Info', 'Operation successful !')
         else:
             tk.messagebox.showerror('Error', 'Please give directory to process')
 
     def enable_disable(self, element, enabled:bool):
         element['state'] = tk.NORMAL if enabled else tk.DISABLED
-
-    def on_revert_changed(self):
-        self.enable_disable(self.gps_chk, not self.revert.get())
-        self.enable_disable(self.suffix_entry, not self.revert.get())
-        self.enable_disable(self.sort_by_dir_month_radiobtn, not self.revert.get())
-        self.enable_disable(self.sort_by_dir_year_radiobtn, not self.revert.get())
-        self.enable_disable(self.sort_by_dir_none_radiobtn, not self.revert.get())
-        self.enable_disable(self.sort_by_dir_year_and_month_radiobtn, not self.revert.get())
         
 
 def start_gui():
     print("Starting GUI...")
     PhotoSorterGui()
     print("GUI closed.")
+
+
+def path_safe_name(name:str):
+    # Remove accents on letters
+    result = unidecode.unidecode(name)
+    # Choose first name in case of two choices 'NameA / NameB'
+    result = result.split('/')[0]
+    # Remove unwanted characters
+    for char in '-:,. ':
+        result = result.replace(char, '')
+    return result
 
 
 def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_dir:SortByDir=SortByDir.SORT_BY_NONE):
@@ -151,7 +175,8 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                     country = location.raw['address']['country']
                 else:
                     country = ''
-                country = unidecode.unidecode(country)
+                # Make name path-proof
+                country = path_safe_name(country)
                 if 'town' in location.raw['address']:
                     town = location.raw['address']['town']
                 elif 'village' in location.raw['address']:
@@ -160,10 +185,11 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                     town = location.raw['address']['municipality']
                 else:
                     town = ''
-                town = unidecode.unidecode(town)
+                town = path_safe_name(town)
 
         # Recover datetime object
         # Fallback to date of creation of file if exif tag absent
+        #TODO : make this an option
         if 'Image DateTime' in exif_data.keys():
             date_time_obj = datetime.strptime(exif_data['Image DateTime'].values, '%Y:%m:%d %H:%M:%S')
         else:
