@@ -3,7 +3,6 @@ import sys
 import glob
 import tkinter as tk
 import tkinter.filedialog
-import tkinter.ttk
 import exifread
 import json
 import unidecode
@@ -15,17 +14,6 @@ from geopy.geocoders import Nominatim
 geolocator = Nominatim(user_agent="photosorter") # Use OpenstreetMap
 
 import argparse
-argparser = argparse.ArgumentParser(description='Renames and moves pictures in a directory.', epilog='If no arguments provided, the interface is launched.')
-argparser.add_argument('directory', help='Path to directory to be processed.', type=str, nargs='?')
-#argparser.add_argument('-g', '--gui', help='Starts User Interface', action='store_true')
-argparser.add_argument('-G', '--gps', help='Uses GPS data to rename files.', action='store_true')
-argparser.add_argument('-s', '--suffix', help='Adds given suffix to each file.')
-argparser.add_argument('-R', '--revert', help='Reverts given directory to original state.', action='store_true')
-#option_group = argparser.add_mutually_exclusive_group(required=False)
-argparser.add_argument('-m', '--month', help='Classify files by month.', action='store_true')
-argparser.add_argument('-y', '--year', help='Classify files by year.', action='store_true')
-argparser.add_argument('-d', '--datetime_fallback', help='Fallback to date of file creation if EXIF is absent.', action='store_true')
-args = argparser.parse_args()
 
 
 ################################### Constants & Enums ##############################################
@@ -43,9 +31,8 @@ class Translator:
         ENGLISH = -1
         FRENCH = 0
 
-    # To add other languages, create an index, and fill all tuples in TRANSLATIONS at your index
+    # To add other languages, create an index in enum, and fill all tuples in TRANSLATIONS at your index
     # In all cases, english is the key to all other languages
-    FRENCH_IDX = 0
     TRANSLATIONS = {
         # First entry are the languages available
         'anglais':['francais'],
@@ -495,6 +482,18 @@ def revert_directory(directory:str) -> int:
 ################################### Main ###########################################################
 
 def main():
+    argparser = argparse.ArgumentParser(description='Renames and moves pictures in a directory using their EXIF data.', epilog='If no arguments provided, the interface is launched.')
+    argparser.add_argument('directory', help='Path to directory to be processed.', type=str, nargs='?')
+    #argparser.add_argument('-g', '--gui', help='Starts User Interface', action='store_true')
+    argparser.add_argument('-G', '--gps', help='Uses GPS data to rename files.', action='store_true')
+    argparser.add_argument('-s', '--suffix', help='Adds given suffix to each file.')
+    argparser.add_argument('-R', '--revert', help='Reverts given directory to original state.', action='store_true')
+    #option_group = argparser.add_mutually_exclusive_group(required=False)
+    argparser.add_argument('-m', '--month', help='Classify files by month.', action='store_true')
+    argparser.add_argument('-y', '--year', help='Classify files by year.', action='store_true')
+    argparser.add_argument('-d', '--datetime_fallback', help='Fallback to date of file creation if EXIF is absent.', action='store_true')
+    args = argparser.parse_args()
+
     if args.directory is not None:
         directory = args.directory
         if args.revert:
