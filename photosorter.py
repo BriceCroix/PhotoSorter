@@ -24,6 +24,7 @@ argparser.add_argument('-R', '--revert', help='Reverts given directory to origin
 #option_group = argparser.add_mutually_exclusive_group(required=False)
 argparser.add_argument('-m', '--month', help='Classify files by month.', action='store_true')
 argparser.add_argument('-y', '--year', help='Classify files by year.', action='store_true')
+argparser.add_argument('-d', '--datetime_fallback', help='Fallback to date of file creation if EXIF is absent.', action='store_true')
 args = argparser.parse_args()
 
 
@@ -52,7 +53,7 @@ class Translator:
         'Directory to process':['Dossier à traiter'],
         'Open directory':['Ouvrir dossier'],
         'Options':['Options'],
-        'Use GPS data':['Utiliser données GPS'],
+        'Use GPS data (slow)':['Utiliser données GPS (lent)'],
         'y/n':['o/n'],
         'Optional files suffix':['Suffixe optionnel'],
         'Sort in subdirectories':['Trier en sous-dossiers'],
@@ -73,6 +74,7 @@ class Translator:
         'Please give directory to process':['Merci de fournir un dossier à traiter'],
         'Operation successful !':['Traitement réussi !'],
         'Language':['Langue'],
+        'Use creation date when EXIF missing':['Utiliser date de creation si EXIF manquant']
     }
 
     def __init__(self, language:Language = Language.ENGLISH) -> None:
@@ -101,6 +103,8 @@ class PhotoSorterGui(tk.Tk):
         self.directory = tk.StringVar()
         self.language = tk.IntVar()
         self.language.set(Translator.Language.ENGLISH.value)
+        self.fallback_datetime = tk.BooleanVar()
+        self.fallback_datetime.set(False)
         self.use_gps = tk.BooleanVar()
         self.use_gps.set(True)
         self.suffix = tk.StringVar()
@@ -131,6 +135,13 @@ class PhotoSorterGui(tk.Tk):
         self.language_english_radiobtn.pack(side=tk.RIGHT, padx=10)
         self.language_french_radiobtn = tk.Radiobutton(self.language_frm, text='francais', variable=self.language, value=Translator.Language.FRENCH.value, command=self.translate)
         self.language_french_radiobtn.pack(side=tk.RIGHT, padx=10)
+
+        self.fallback_datetime_frm = tk.Frame(self.options_lblfrm)
+        self.fallback_datetime_frm.pack(side=tk.TOP, fill='x')
+        self.fallback_datetime_lbl = tk.Label(self.fallback_datetime_frm)
+        self.fallback_datetime_lbl.pack(side=tk.LEFT)
+        self.fallback_datetime_chk = tk.Checkbutton(self.fallback_datetime_frm, variable=self.fallback_datetime)
+        self.fallback_datetime_chk.pack(side=tk.RIGHT, expand=True)
 
         self.gps_frm = tk.Frame(self.options_lblfrm)
         self.gps_frm.pack(side=tk.TOP, fill='x')
@@ -182,7 +193,9 @@ class PhotoSorterGui(tk.Tk):
         self.open_dir_btn.config(text=self.translator.translate('Open directory'))
         self.options_lblfrm.config(text=self.translator.translate('Options'))
         self.language_lbl.config(text=self.translator.translate('Language'))
-        self.gps_lbl.config(text=self.translator.translate('Use GPS data'))
+        self.fallback_datetime_lbl.config(text=self.translator.translate('Use creation date when EXIF missing'))
+        self.fallback_datetime_chk.config(text=self.translator.translate('y/n'))
+        self.gps_lbl.config(text=self.translator.translate('Use GPS data (slow)'))
         self.gps_chk.config(text=self.translator.translate('y/n'))
         self.suffix_lbl.config(text=self.translator.translate('Optional files suffix'))
         self.sort_by_dir_lbl.config(text=self.translator.translate('Sort in subdirectories'))
@@ -257,7 +270,7 @@ class PhotoSorterGui(tk.Tk):
             tk.messagebox.showerror(self.translator.translate('Error'), self.translator.translate('Please give directory to process'))
         
     def process_directory_thread(self):
-        process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get()))
+        process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get()), self.fallback_datetime.get())
         self.enable_disable(self.start_btn, True)
         self.enable_disable(self.revert_btn, True)
         self.busy_lbl.config(bg='green', text=self.translator.translate('App is ready'))
@@ -287,21 +300,22 @@ def path_safe_name(name:str):
     return result
 
 
-def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_dir:SortByDir=SortByDir.SORT_BY_NONE):
+def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_dir:SortByDir=SortByDir.SORT_BY_NONE, datetime_fallback_os:bool=False):
     # Match all jpeg files
-    photos = []
+    photo_pathnames = []
     for ext in ('*.jpg', '*.jpeg', '*.JPG', '*.JPEG'):
-        photos.extend(glob.glob(os.path.join(directory, ext)))
-    photos = sorted(photos)
+        photo_pathnames.extend(glob.glob(os.path.join(directory, ext)))
+    photo_pathnames = sorted(photo_pathnames)
     # For each photo
-    json_data = {}
-    for i in range(len(photos)):
+    # 0 : list of old paths, 1 : list of new paths
+    name_pairs = [[],[]]
+    for i in range(len(photo_pathnames)):
         # Convert paths to absolute path
-        photos[i] = os.path.abspath(photos[i])
-        photo_path = photos[i]
+        photo_pathnames[i] = os.path.abspath(photo_pathnames[i])
+        photo_pathname = photo_pathnames[i]
 
         try:
-            exif_data = exifread.process_file(open(photo_path, 'rb'))
+            exif_data = exifread.process_file(open(photo_pathname, 'rb'))
 
             # Recover gps info if present
             country = ''
@@ -333,13 +347,15 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                         town = ''
                     town = path_safe_name(town)
 
-            # Recover datetime object
-            # Fallback to date of creation of file if exif tag absent
-            #TODO : make this an option
+            # Recover datetime object, fallback to date of creation of file if exif tag absent
             if 'Image DateTime' in exif_data.keys():
                 date_time_obj = datetime.strptime(exif_data['Image DateTime'].values, '%Y:%m:%d %H:%M:%S')
             else:
-                date_time_obj = datetime.fromtimestamp(os.path.getmtime(photo_path))
+                print('Missing datetime EXIF for ' + photo_pathname)
+                if datetime_fallback_os:
+                    date_time_obj = datetime.fromtimestamp(os.path.getmtime(photo_pathname))
+                else:
+                    continue
 
             # Create new name
             new_name = f'{date_time_obj.year:04}-{date_time_obj.month:02}-{date_time_obj.day:02}'
@@ -353,7 +369,7 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                 new_name += f'-{suffix}'
             new_name += '.jpg'
             # Convert to absolute path and create subdirectory if necessary
-            destination_dir = os.path.dirname(photo_path)
+            destination_dir = os.path.dirname(photo_pathname)
             subdestination_dir = destination_dir
             if sort_by_dir == SortByDir.SORT_BY_YEAR:
                 subdir_name = f'{date_time_obj.year:04}'
@@ -365,35 +381,68 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                 subdir_name = os.path.join(f'{date_time_obj.year:04}', f'{date_time_obj.month:02}')
                 subdestination_dir = os.path.join(destination_dir, subdir_name)
             os.makedirs(subdestination_dir, exist_ok=True)
-            full_new_name = os.path.join(subdestination_dir, new_name)
-
-            # Handle photos that are already well named
-            if full_new_name == photo_path:
-                continue
-
-            # Handle pictures taken same place same minute
-            if os.path.isfile(full_new_name):
-                # Add seconds
-                new_name_without_ext, ext = os.path.splitext(new_name)
-                new_name = new_name[:16] + f'm{date_time_obj.second:02}' + new_name[16:]
-                full_new_name = os.path.join(subdestination_dir, new_name)
-            # Handle pictures taken same place same minute same second by adding a number at the end
-            additional_number = 1
-            while os.path.isfile(full_new_name):
-                new_name_without_ext, ext = os.path.splitext(new_name)
-                full_new_name = os.path.join(subdestination_dir, new_name_without_ext + f'-{additional_number}{ext}')
-                additional_number += 1
-
-            # Finally rename picture
-            # TODO : only rename pictures at the end, once every picture is scanned, in order to handle pictures with same name properly
-            os.rename(photo_path, full_new_name)
-            print(photo_path + ' -> ' + full_new_name)
-            # Add json data
-            key = f'file_{i}'
-            json_data[key] = {'OldName':photo_path, 'NewName' : full_new_name}
+            new_pathname = os.path.join(subdestination_dir, new_name)
+            # Same pair oldname->newname
+            name_pairs[0].append(photo_pathname)
+            name_pairs[1].append(new_pathname)
         except Exception as e:
             print(e, file=sys.stderr)
 
+    # Handle name duplicates
+    for i in range(len(name_pairs[1])):
+        new_pathname = name_pairs[1][i]
+        # Count number of photos meant to be renamed with identical name
+        new_pathname_occurences = name_pairs[1].count(new_pathname)
+        # Each path should be unical
+        if new_pathname_occurences == 1:
+            continue
+        else:
+            # Recover indices of matching pathnames
+            indices_of_matching_pathnames = []
+            for k in range(len(name_pairs[1])):
+                if name_pairs[1][k] == new_pathname:
+                    indices_of_matching_pathnames.append(k)
+            # For each of these files sharing same name, recover a 'second of creation'
+            creation_second = []
+            for matching_index in indices_of_matching_pathnames:
+                old_pathname = name_pairs[0][matching_index]
+                # recover exact moment of creation according to exif data and os
+                exif_data = exifread.process_file(open(old_pathname, 'rb'))
+                if 'Image DateTime' in exif_data.keys():
+                    date_time_exif = datetime.strptime(exif_data['Image DateTime'].values, '%Y:%m:%d %H:%M:%S')
+                else:
+                    date_time_exif = datetime.fromtimestamp(os.path.getmtime(photo_pathname))
+                date_time_os = datetime.fromtimestamp(os.path.getmtime(photo_pathname))
+                creation_second.append(date_time_exif.second + 0.01*(date_time_os.second + 1e-3 * date_time_os.microsecond))
+            # Now order these files
+            order_integer_suffix = 1
+            while len(indices_of_matching_pathnames) != 0:
+                index_of_index_of_first_pic = creation_second.index(min(creation_second))
+                index_of_first_pic = indices_of_matching_pathnames[index_of_index_of_first_pic]
+                new_pathname_to_be_revised = name_pairs[1][index_of_first_pic]
+                new_pathname_without_ext, ext = os.path.splitext(new_pathname_to_be_revised)
+                name_pairs[1][index_of_first_pic] = new_pathname_without_ext + f'-{order_integer_suffix}' + ext
+                indices_of_matching_pathnames.pop(index_of_index_of_first_pic)
+                creation_second.pop(index_of_index_of_first_pic)
+                order_integer_suffix += 1
+    # Finally rename files
+    json_data = {}
+    for i in range(len(name_pairs[1])):
+        try:
+            old_pathname = name_pairs[0][i]
+            new_pathname = name_pairs[1][i]
+            if old_pathname != new_pathname: 
+                if not os.path.isfile(new_pathname):
+                    os.rename(old_pathname, new_pathname)
+                    print('Renamed : ' +  old_pathname + ' -> ' + new_pathname)
+                    # Add json data
+                    key = f'file_{i}'
+                    json_data[key] = {'OldName' : old_pathname, 'NewName' : new_pathname}
+                else:
+                    print("Error : new name already exists : " + old_pathname + ' -> ' + new_pathname, file=sys.stderr)
+        except Exception as e:
+            print(e, file=sys.stderr)
+    
     # Dump json to file
     if(len(json_data) != 0):
         photosorter_dir = os.path.join(destination_dir, PHOTOSORTER_SUBDIR)
@@ -459,7 +508,7 @@ def main():
                 sort_by_dir = SortByDir.SORT_BY_YEAR
             elif args.month:
                 sort_by_dir = SortByDir.SORT_BY_MONTH
-            process_directory(directory, args.gps, suffix, sort_by_dir)
+            process_directory(directory, args.gps, suffix, sort_by_dir, datetime_fallback_os=args.datetime_fallback)
     else:
         start_gui()
 
