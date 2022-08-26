@@ -1,6 +1,11 @@
 .vscode
 .photosorter
+dist
+build
+photosorter.dist
+photosorter.build
 *.jpg
 *.jpeg
 *.JPG
 *.JPEG
+*.spec

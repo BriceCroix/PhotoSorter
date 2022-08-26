@@ -15,6 +15,9 @@ geolocator = Nominatim(user_agent="photosorter") # Use OpenstreetMap
 
 import argparse
 
+###################################     Compile       ##############################################
+
+# In order to create a single executable file, use 'pyinstaller photosorter.py -F'
 
 ################################### Constants & Enums ##############################################
 
@@ -282,7 +285,7 @@ def path_safe_name(name:str):
     # Choose first name in case of two choices 'NameA / NameB'
     result = result.split('/')[0]
     # Remove unwanted characters
-    for char in '-:,. ':
+    for char in ':, &$%!?#{}<>*\'\"@+`|=\\/':
         result = result.replace(char, '')
     return result
 
@@ -335,12 +338,14 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                     town = path_safe_name(town)
 
             # Recover datetime object, fallback to date of creation of file if exif tag absent
+            datetime_from_exif = True
             if 'Image DateTime' in exif_data.keys():
                 date_time_obj = datetime.strptime(exif_data['Image DateTime'].values, '%Y:%m:%d %H:%M:%S')
             else:
                 print('Missing datetime EXIF for ' + photo_pathname)
                 if datetime_fallback_os:
                     date_time_obj = datetime.fromtimestamp(os.path.getmtime(photo_pathname))
+                    datetime_from_exif = False
                 else:
                     continue
 
@@ -348,6 +353,8 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
             new_name = f'{date_time_obj.year:04}-{date_time_obj.month:02}-{date_time_obj.day:02}'
             new_name += '-'
             new_name += f'{date_time_obj.hour:02}H{date_time_obj.minute:02}'#m{date_time_obj.second:02}s'
+            if not datetime_from_exif:
+                new_name += '~'
             if country != '':
                 new_name += f'-{country}'
             if town != '':
