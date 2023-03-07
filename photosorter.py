@@ -295,7 +295,8 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
     photo_pathnames = []
     for ext in ('*.jpg', '*.jpeg', '*.JPG', '*.JPEG'):
         photo_pathnames.extend(glob.glob(os.path.join(directory, ext)))
-    photo_pathnames = sorted(photo_pathnames)
+    # Remove duplicates (jpg + JPG on windows) then sort
+    photo_pathnames = sorted(list(set(photo_pathnames)))
     # For each photo
     # 0 : list of old paths, 1 : list of new paths
     name_pairs = [[],[]]
