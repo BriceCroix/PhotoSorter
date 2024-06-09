@@ -1,11 +1,28 @@
+#Python virtual env
+
+venv
+env
+.env
+.venv
+
+# Python cache
+
+**/__pycache__
+
+# IDE
+.idea
 .vscode
-.photosorter
+
+# pyinstaller
+
 dist
 build
-photosorter.dist
-photosorter.build
+*.spec
+
+# Misc
+
+.photosorter
 *.jpg
 *.jpeg
 *.JPG
 *.JPEG
-*.spec
