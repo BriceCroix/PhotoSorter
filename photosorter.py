@@ -163,7 +163,7 @@ class PhotoSorterGui(tk.Tk):
         # Start frame
         self.start_lblfrm = tk.LabelFrame(self, text='')
         self.start_lblfrm.pack(side=tk.BOTTOM, fill='x')
-        
+
         self.start_frm = tk.Frame(self.start_lblfrm)
         self.start_frm.pack(side=tk.TOP, fill='x')
         self.revert_btn = tk.Button(self.start_lblfrm, command=self.on_revert_btn_click)
@@ -196,7 +196,6 @@ class PhotoSorterGui(tk.Tk):
         self.revert_btn.config(text=self.translator.translate('Revert'))
         self.start_btn.config(text=self.translator.translate('Start'))
         self.busy_lbl.config(text=self.translator.translate('App is ready' if not self.busy.get() else 'APP IS BUSY'))
-
 
     def on_exit(self):
         if self.busy.get():
@@ -250,15 +249,15 @@ class PhotoSorterGui(tk.Tk):
             self.busy.set(True)
             job = Thread(target=self.process_directory_thread)
             job.start()
-            #process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get()))
-            #self.enable_disable(self.start_btn, True)
-            #self.enable_disable(self.revert_btn, True)
-            #self.busy_lbl.config(bg='green', text=self.translator.translate('App is ready'))
-            #self.busy.set(False)
-            #tk.messagebox.showinfo(self.translator.translate('Info'), self.translator.translate('Operation successful !'))
+            # process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get()))
+            # self.enable_disable(self.start_btn, True)
+            # self.enable_disable(self.revert_btn, True)
+            # self.busy_lbl.config(bg='green', text=self.translator.translate('App is ready'))
+            # self.busy.set(False)
+            # tk.messagebox.showinfo(self.translator.translate('Info'), self.translator.translate('Operation successful !'))
         else:
             tk.messagebox.showerror(self.translator.translate('Error'), self.translator.translate('Please give directory to process'))
-        
+
     def process_directory_thread(self):
         process_directory(self.directory.get(), self.use_gps.get(), self.suffix.get(), SortByDir(self.sort_by_dir.get()), self.fallback_datetime.get())
         self.enable_disable(self.start_btn, True)
@@ -437,14 +436,14 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
                     print("Error : new name already exists : " + old_pathname + ' -> ' + new_pathname, file=sys.stderr)
         except Exception as e:
             print(e, file=sys.stderr)
-    
+
     # Dump json to file
     if(len(json_data) != 0):
         photosorter_dir = os.path.join(destination_dir, PHOTOSORTER_SUBDIR)
         os.makedirs(photosorter_dir, exist_ok=True)
         with open(os.path.join(photosorter_dir, f'{len(os.listdir(photosorter_dir))+1}.json'), 'w') as outfile:
             json.dump(json_data, outfile, indent=4)
-    
+
 
 def remove_empty_directories(directory:str):
     for entry in os.scandir(directory):
