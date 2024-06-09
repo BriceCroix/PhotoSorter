@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import glob
 import tkinter as tk
@@ -268,7 +269,7 @@ class PhotoSorterGui(tk.Tk):
 
     def enable_disable(self, element, enabled:bool):
         element['state'] = tk.NORMAL if enabled else tk.DISABLED
-        
+
 
 ################################### Methods ########################################################
 
@@ -287,6 +288,28 @@ def path_safe_name(name:str):
     for char in ':, &$%!?#{}<>*\'\"@+`|=\\/':
         result = result.replace(char, '')
     return result
+
+
+def extract_datetime_from_whatsapp_filename(filename) -> datetime | None:
+    # Define the regex pattern to match the date and time in the filename
+    pattern = r"WhatsApp Image (\d{4}-\d{2}-\d{2}) at (\d{2}\.\d{2}\.\d{2})"
+
+    # Search for the pattern in the filename
+    match = re.search(pattern, filename)
+
+    if match:
+        date_str = match.group(1)
+        time_str = match.group(2)
+
+        # Combine date and time strings
+        datetime_str = f"{date_str} {time_str}"
+
+        # Parse the datetime string to a datetime object
+        extracted_datetime = datetime.strptime(datetime_str, "%Y-%m-%d %H.%M.%S")
+
+        return extracted_datetime
+    else:
+        return None
 
 
 def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_dir:SortByDir=SortByDir.SORT_BY_NONE, datetime_fallback_os:bool=False):
@@ -342,12 +365,19 @@ def process_directory(directory:str, use_gps:bool=False, suffix:str='', sort_by_
             if 'Image DateTime' in exif_data.keys():
                 date_time_obj = datetime.strptime(exif_data['Image DateTime'].values, '%Y:%m:%d %H:%M:%S')
             else:
-                print('Missing datetime EXIF for ' + photo_pathname)
-                if datetime_fallback_os:
-                    date_time_obj = datetime.fromtimestamp(os.path.getmtime(photo_pathname))
-                    datetime_from_exif = False
-                else:
-                    continue
+                # Recognize file name of type "WhatsApp Image 2023-11-02 at 14.54.57.jpeg"
+                date_time_obj = extract_datetime_from_whatsapp_filename(
+                    os.path.basename(photo_pathname)
+                )
+                if date_time_obj is None:
+                    print("Missing datetime EXIF for " + photo_pathname)
+                    if datetime_fallback_os:
+                        date_time_obj = datetime.fromtimestamp(
+                            os.path.getmtime(photo_pathname)
+                        )
+                        datetime_from_exif = False
+                    else:
+                        continue
 
             # Create new name
             new_name = f'{date_time_obj.year:04}-{date_time_obj.month:02}-{date_time_obj.day:02}'
